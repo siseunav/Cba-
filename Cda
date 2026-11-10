@@ -1,0 +1,559 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cda</title>
+<style>
+*{box-sizing:border-box}
+body{
+ margin:0;background: linear-gradient(180deg, rgba(67, 221, 216, 0.15) 0%, rgba(244, 249, 253, 0.805) 100%);color:rgba(244, 249, 253, 0.805);
+ font:13px "Segoe UI",sans-serif;overflow:hidden
+}
+button{
+ background:transparent;color:rgba(67, 221, 216, 0.15);border:0;
+ padding:7px;cursor:pointer;border-radius:5px
+}
+button:hover{background:#34363b;color:white}
+#app{height:100vh;display:flex;flex-direction:column}
+#top{
+ height:43px;background:rga(244, 249, b253, 0.805);border-bottom:1px solid #333;
+ display:flex;align-items:center;padding:0 12px;gap:12px
+}
+.logo{font-weight:bold;color:rgb(191, 169, 88);font-size:15px}
+#top button{font-size:12px}
+#projectName{color:#999;margin-left:auto}
+#main{display:flex;flex:1;min-height:0}
+#sidebar{
+ width:245px;background:rgba(244, 249, 253, 0.805);border-right:1px solid  rgb(191, 169, 88);
+ display:flex;flex-direction:column;flex-shrink:0
+}
+.sideTitle{
+ height:38px;padding:11px 12px;color:#aaa;
+ font-size:11px;font-weight:bold;letter-spacing:1px;
+ display:flex;justify-content:space-between
+}
+#tree{overflow:auto;flex:1;padding:4px}
+.node{
+ height:27px;display:flex;align-items:center;gap:7px;
+ padding:0 7px;cursor:pointer;border-radius:4px;
+ white-space:nowrap;overflow:hidden
+}
+.node:hover{background:#303137}
+.node.active{background:#393a42;color:white}
+.node .name{overflow:hidden;text-overflow:ellipsis}
+.children{padding-left:16px}
+#center{flex:1;display:flex;flex-direction:column;min-width:0}
+#tabs{
+ height:39px;background:#222327;display:flex;
+ overflow-x:auto;border-bottom:1px solid #333
+}
+.tab{
+ min-width:110px;max-width:190px;padding:11px 12px;
+ border-right:1px solid #333;cursor:pointer;
+ color:#999;white-space:nowrap;overflow:hidden;
+ text-overflow:ellipsis
+}
+.tab.active{background:#18191c;color:white;border-top:2px solid #83a9d8}
+#editorArea{flex:1;display:flex;min-height:0;position:relative}
+#gutter{
+ width:48px;background:#18191c;color:#666;
+ padding:13px 10px;text-align:right;
+ white-space:pre;overflow:hidden;
+ font:14px/22px Consolas,monospace
+}
+#editor{
+ flex:1;background:#18191c;color:#d8dce5;
+ border:0;outline:0;resize:none;padding:13px 10px;
+ font:14px/22px Consolas,monospace;
+ white-space:pre;overflow:auto;tab-size:4
+}
+#bottom{
+ height:155px;background:#202125;
+ border-top:1px solid #383838;
+ display:flex;flex-direction:column
+}
+#bottomHead{
+ height:35px;padding:8px 12px;
+ border-bottom:1px solid #333;color:#aaa
+}
+#terminal{
+ flex:1;padding:10px;overflow:auto;
+ color:#a6c99d;font:13px/20px Consolas,monospace
+}
+#status{
+ height:24px;background:#527ca8;color:white;
+ display:flex;align-items:center;padding:0 10px;
+ font-size:11px;gap:15px
+}
+#menu{
+ position:absolute;display:none;background:#292a30;
+ border:1px solid #555;padding:5px;z-index:5;
+ box-shadow:0 5px 20px #0008
+}
+#menu button{display:block;width:100%;text-align:left}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<div id="app">
+
+<header id="top">
+<!---<span class="logo">Cda</span>--->
+ <span class="logo">
+    <object
+        data="K:\beuta\i/svgCda1188.svg"
+        type="image/svg+xml"
+        width="60"
+        height="60">
+    </object>
+</span>
+ <button onclick="openFolder()">Open Folder</button>
+ <button onclick="newFile()">New File</button>
+ <button onclick="saveFile()">Save</button>
+ <span id="projectName">No project</span>
+</header>
+
+<div id="main">
+ <aside id="sidebar">
+  <div class="sideTitle">
+   <span>EXPLORER</span>
+   <span>
+    <button title="New file" onclick="newFile()">��</button>
+    <button title="New folder" onclick="newFolder()">??</button>
+    <button title="Refresh" onclick="refreshTree()">?</button>
+   </span>
+  </div>
+  <div id="tree"></div>
+ </aside>
+
+ <section id="center">
+  <div id="tabs"></div>
+  <div id="editorArea">
+   <div id="gutter">1</div>
+   <textarea id="editor" spellcheck="false"
+    placeholder="Select a file or create a new one..."></textarea>
+  </div>
+ </section>
+</div>
+
+<section id="bottom">
+ <div id="bottomHead">
+  <button onclick="toggleTerminal()">TERMINAL</button>
+  <button onclick="terminalCommand('help')">HELP</button>
+  <button onclick="clearTerminal()">CLEAR</button>
+ </div>
+ <div id="terminal">
+  MY ZED EDITOR<br>
+  Welcome! Open a project folder to begin.<br>
+  Type help for available editor commands.
+ </div>
+</section>
+
+<footer id="status">
+ <span id="state">Ready</span>
+ <span id="language">Plain Text</span>
+ <span id="lineInfo">Ln 1, Col 1</span>
+ <span>UTF-8</span>
+</footer>
+</div>
+
+<input type="file" id="fallbackInput" webkitdirectory multiple hidden>
+
+<script>
+const $=id=>document.getElementById(id);
+const editor=$("editor");
+
+let rootHandle=null;
+let files=[];
+let activeId=null;
+let nextId=1;
+let expanded=new Set();
+let terminalVisible=true;
+
+function log(message){
+ $("terminal").innerHTML+="<br>"+escapeHTML(message);
+ $("terminal").scrollTop=$("terminal").scrollHeight;
+}
+
+function escapeHTML(s){
+ return String(s).replace(/[&<>"']/g,c=>({
+ "&":"&amp;","<":"&lt;",">":"&gt;",
+ '"':"&quot;","'":"&#39;"
+ })[c]);
+}
+
+async function openFolder(){
+ if(!window.showDirectoryPicker){
+  log("Folder picker unavailable. Use a supported Chromium browser.");
+  return;
+ }
+ try{
+  rootHandle=await window.showDirectoryPicker({mode:"readwrite"});
+  $("projectName").textContent=rootHandle.name;
+  files=[];
+  activeId=null;
+  expanded.clear();
+  $("editor").value="";
+  await refreshTree();
+  log("Opened project: "+rootHandle.name);
+ }catch(e){
+  if(e.name!=="AbortError")log("Could not open folder: "+e.message);
+ }
+}
+
+async function permission(handle){
+ let p=await handle.queryPermission({mode:"readwrite"});
+ if(p!=="granted")
+  p=await handle.requestPermission({mode:"readwrite"});
+ if(p!=="granted")throw Error("Folder permission denied");
+}
+
+async function readDirectory(dir,path=""){
+ let result=[];
+ for await(const [name,handle] of dir.entries()){
+  const item={
+   name,handle,path:path?path+"/"+name:name,
+   isDirectory:handle.kind==="directory"
+  };
+  result.push(item);
+  if(item.isDirectory && expanded.has(item.path)){
+   item.children=await readDirectory(handle,item.path);
+  }
+ }
+ result.sort((a,b)=>
+  Number(b.isDirectory)-Number(a.isDirectory)||
+  a.name.localeCompare(b.name)
+ );
+ return result;
+}
+
+async function refreshTree(){
+ if(!rootHandle)return;
+ try{
+  const entries=await readDirectory(rootHandle);
+  $("tree").innerHTML="";
+  const root=document.createElement("div");
+  root.className="node";
+  root.innerHTML="?? <span class='name'></span>";
+  root.querySelector(".name").textContent=rootHandle.name;
+  root.onclick=()=>toggleFolder(rootHandle,rootHandle.name);
+  $("tree").append(root);
+  renderEntries(entries,$("tree"),0);
+ }catch(e){log("Explorer error: "+e.message)}
+}
+
+function renderEntries(entries,parent,depth){
+ for(const item of entries){
+  const row=document.createElement("div");
+  row.className="node";
+  row.style.paddingLeft=(8+depth*15)+"px";
+  if(item.handle===getActiveHandle())row.classList.add("active");
+
+  const icon=document.createElement("span");
+  icon.textContent=item.isDirectory?
+   (expanded.has(item.path)?"??":"??"):fileIcon(item.name);
+  const label=document.createElement("span");
+  label.className="name";
+  label.textContent=item.name;
+  row.append(icon,label);
+  parent.append(row);
+
+  row.onclick=async()=>{
+   if(item.isDirectory){
+    if(expanded.has(item.path))expanded.delete(item.path);
+    else expanded.add(item.path);
+    await refreshTree();
+   }else{
+    await openHandle(item);
+   }
+  };
+  row.oncontextmenu=e=>{
+   e.preventDefault();
+   contextMenu(item);
+  };
+
+  if(item.children){
+   const child=document.createElement("div");
+   child.className="children";
+   parent.append(child);
+   renderEntries(item.children,child,depth+1);
+  }
+ }
+}
+
+function fileIcon(name){
+ const ext=name.split(".").pop().toLowerCase();
+ return ({
+ java:"?",html:"??",css:"??",js:"??",
+ json:"{}",py:"??",md:"??",txt:"??",
+ bat:"?",xml:"??"
+ })[ext]||"??";
+}
+
+function getActiveHandle(){
+ return files.find(f=>f.id===activeId)?.handle||null;
+}
+
+async function openHandle(item){
+ try{
+  const file=await item.handle.getFile();
+  const content=await file.text();
+  let existing=files.find(f=>f.path===item.path);
+  if(!existing){
+   existing={
+    id:nextId++,name:item.name,path:item.path,
+    handle:item.handle,content,dirty:false
+   };
+   files.push(existing);
+  }
+  activeId=existing.id;
+  showEditor();
+ }catch(e){log("Cannot read file: "+e.message)}
+}
+
+function showEditor(){
+ const f=files.find(x=>x.id===activeId);
+ if(!f)return;
+ editor.value=f.content;
+ $("language").textContent=f.name.split(".").pop().toUpperCase();
+ $("state").textContent=f.dirty?"Modified":"Saved";
+ renderTabs();
+ updateGutter();
+ refreshTree();
+}
+
+function renderTabs(){
+ $("tabs").innerHTML="";
+ files.forEach(f=>{
+  const tab=document.createElement("div");
+  tab.className="tab"+(f.id===activeId?" active":"");
+  tab.textContent=(f.dirty?"�� ":"")+f.name+"   ��";
+  tab.onclick=()=>{
+   if(activeId!==f.id)syncActive();
+   activeId=f.id;
+   showEditor();
+  };
+  tab.oncontextmenu=e=>{
+   e.preventDefault();
+   closeTab(f.id);
+  };
+  $("tabs").append(tab);
+ });
+}
+
+function syncActive(){
+ const f=files.find(x=>x.id===activeId);
+ if(f)f.content=editor.value;
+}
+
+function closeTab(id){
+ const i=files.findIndex(f=>f.id===id);
+ if(i<0)return;
+ if(files[i].dirty&&!confirm("Close unsaved file?"))return;
+ files.splice(i,1);
+ if(activeId===id)activeId=files.length?files[0].id:null;
+ if(activeId)showEditor();
+ else{
+  editor.value="";
+  $("tabs").innerHTML="";
+  updateGutter();
+ }
+}
+
+async function newFile(){
+ if(!rootHandle){
+  log("Open a project folder first.");
+  return;
+ }
+ const name=prompt("New file name:","Main.java");
+ if(!name)return;
+ try{
+  await permission(rootHandle);
+  const handle=await rootHandle.getFileHandle(name,{create:true});
+  const file={id:nextId++,name,path:name,handle,content:"",dirty:true};
+  files.push(file);
+  activeId=file.id;
+  showEditor();
+  log("Created "+name);
+ }catch(e){log("Create failed: "+e.message)}
+}
+
+async function newFolder(){
+ if(!rootHandle){
+  log("Open a project folder first.");
+  return;
+ }
+ const name=prompt("New folder name:");
+ if(!name)return;
+ try{
+  await permission(rootHandle);
+  await rootHandle.getDirectoryHandle(name,{create:true});
+  expanded.add(name);
+  await refreshTree();
+  log("Created folder "+name);
+ }catch(e){log("Folder creation failed: "+e.message)}
+}
+
+async function saveFile(){
+ const f=files.find(x=>x.id===activeId);
+ if(!f)return;
+ try{
+  await permission(f.handle);
+  const writable=await f.handle.createWritable();
+  await writable.write(editor.value);
+  await writable.close();
+  f.content=editor.value;
+  f.dirty=false;
+  $("state").textContent="Saved";
+  renderTabs();
+  log("Saved "+f.name);
+ }catch(e){log("Save failed: "+e.message)}
+}
+
+function newBlank(){
+ editor.value="";
+ updateGutter();
+}
+
+async function contextMenu(item){
+ const action=prompt(
+  item.name+"\n1 Rename\n2 Delete\n3 Cancel","1"
+ );
+ if(action==="1")await renameItem(item);
+ if(action==="2")await deleteItem(item);
+}
+
+async function renameItem(item){
+ const name=prompt("New name:",item.name);
+ if(!name||name===item.name)return;
+ if(item.isDirectory){
+  log("Folder renaming is not supported in this browser version.");
+  return;
+ }
+ try{
+  await permission(item.handle);
+  const file=await item.handle.getFile();
+  const newHandle=await rootHandle.getFileHandle(name,{create:true});
+  const writable=await newHandle.createWritable();
+  await writable.write(await file.arrayBuffer());
+  await writable.close();
+  await rootHandle.removeEntry(item.name);
+  const opened=files.find(f=>f.path===item.path);
+  if(opened){
+   opened.name=name;
+   opened.path=name;
+   opened.handle=newHandle;
+  }
+  await refreshTree();
+  renderTabs();
+  log("Renamed to "+name);
+ }catch(e){log("Rename failed: "+e.message)}
+}
+
+async function deleteItem(item){
+ if(!confirm("Delete "+item.name+"?"))return;
+ try{
+  await permission(rootHandle);
+  await rootHandle.removeEntry(item.name,{recursive:item.isDirectory});
+  files=files.filter(f=>f.path!==item.path);
+  if(!files.some(f=>f.id===activeId)){
+   activeId=files.length?files[0].id:null;
+   if(activeId)showEditor();
+   else editor.value="";
+  }
+  await refreshTree();
+  renderTabs();
+  log("Deleted "+item.name);
+ }catch(e){log("Delete failed: "+e.message)}
+}
+
+function updateGutter(){
+ const count=editor.value.split("\n").length;
+ $("gutter").textContent=Array.from(
+  {length:count},(_,i)=>i+1
+ ).join("\n");
+}
+
+editor.addEventListener("input",()=>{
+ const f=files.find(x=>x.id===activeId);
+ if(f){
+  f.content=editor.value;
+  f.dirty=true;
+  $("state").textContent="Modified";
+  renderTabs();
+ }
+ updateGutter();
+ updateLineInfo();
+});
+
+editor.addEventListener("scroll",()=>{
+ $("gutter").scrollTop=editor.scrollTop;
+});
+
+function updateLineInfo(){
+ const pos=editor.selectionStart;
+ const before=editor.value.slice(0,pos).split("\n");
+ $("lineInfo").textContent=
+ "Ln "+before.length+", Col "+(before[before.length-1].length+1);
+}
+
+editor.addEventListener("click",updateLineInfo);
+editor.addEventListener("keyup",updateLineInfo);
+
+editor.addEventListener("keydown",e=>{
+ if(e.key==="Tab"){
+  e.preventDefault();
+  editor.setRangeText("    ",editor.selectionStart,
+   editor.selectionEnd,"end");
+  editor.dispatchEvent(new Event("input"));
+ }
+ if(e.ctrlKey&&e.key==="s"){
+  e.preventDefault();saveFile();
+ }
+ if(e.ctrlKey&&e.key==="w"){
+  e.preventDefault();
+  closeTab(activeId);
+ }
+ if(e.ctrlKey&&e.key==="n"){
+  e.preventDefault();newFile();
+ }
+ if(e.key==="Enter"){
+  const pos=editor.selectionStart;
+  const line=editor.value.slice(0,pos).split("\n").pop();
+  const indent=line.match(/^\s*/)[0];
+  setTimeout(()=>{
+   editor.setRangeText(indent,editor.selectionStart,
+    editor.selectionEnd,"end");
+   editor.dispatchEvent(new Event("input"));
+  },0);
+ }
+});
+
+function toggleTerminal(){
+ terminalVisible=!terminalVisible;
+ $("bottom").classList.toggle("hidden",!terminalVisible);
+}
+function clearTerminal(){$("terminal").innerHTML=""}
+
+function terminalCommand(cmd){
+ if(cmd==="help"){
+  log("Available editor commands:");
+  log("help - Show help");
+  log("clear - Clear panel");
+  log("files - Show open files");
+  log("save - Save current file");
+ }else if(cmd==="files"){
+  files.forEach(f=>log(f.name));
+ }else if(cmd==="save"){
+  saveFile();
+ }else if(cmd==="clear"){
+  clearTerminal();
+ }else{
+  log("Unknown editor command");
+ }
+}
+</script>
+</body>
+</html>
